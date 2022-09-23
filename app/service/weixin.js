@@ -1,0 +1,76 @@
+'use strict';
+const Service = require('egg').Service;
+
+class WeixinService extends Service {
+    async start() {
+        console.log('Start Spide!');
+        // 查看uin的情况，如果能够爬取再爬取
+        const result = await this.service.db.can_i_crawl();
+        console.log('CAN I CRAWL:')
+        console.log(result)
+        if(result === true){
+            await this.weixinDriver();
+        }else{
+            console.log('No Usable UIN!!!');
+        }
+    }
+
+
+    // 定时执行scrapy任务
+    async weixinDriver() {
+        const scrapyd_server_url = this.app.config.ScrapydServerUrl;
+        // 拼接curl地址
+        const url = scrapyd_server_url + "schedule.json";
+
+        //预留uin，以备未来微信终端增加后分组
+        const biz = await this.get_1_biz('scrapyd');
+        console.log("===========================biz========================")
+        console.log(biz)
+        console.log("===========================biz end========================")
+        console.log(biz)
+
+        if (biz !== false) {
+            const data = {
+                'project': 'weixin_local',
+                'spider': 'weixin',
+                'biz': biz.biz,
+                'db': biz.db,
+                'wx_name': biz.name
+            }
+            const result = await this.ctx.curl(
+                url, {
+                    method: 'POST',
+                    data: data,
+                    dataType: 'json'
+                }
+            );
+            console.log(result)
+        }
+    }
+
+
+    //从需要实时监控的biz中和需要分析log的biz中各取一个
+    //随机确定选哪个
+    async get_1_biz(uin) {
+        console.log("uin in func get_1_biz:");
+        console.log(uin);
+
+        let biz = await this.service.db.select_1_biz_order_by_crawl_time();
+        if (biz != null) {
+            const res_1 = await this.service.db.update_biz_time(biz.biz);
+            if (res_1 === true) {
+                console.log('Find Biz Type 1！');
+                console.log(biz);
+                return biz;
+            } else {
+                console.log('Update Biz Time Error！');
+                return false;
+            }
+        } else {
+            console.log('No Biz Needs Crawl！');
+            return false;
+        }
+    }
+}
+
+module.exports = WeixinService;
